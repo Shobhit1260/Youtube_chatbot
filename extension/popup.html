@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <h2>YouTube AI Assistant</h2>
+      </div>
+      <div class="status" id="status">
+        <div class="status-dot"></div>
+        <span>Ready</span>
+      </div>
+    </div>
+
+    <!-- Video Info -->
+    <div class="video-info" id="videoInfo" style="display: none;">
+      <div class="video-indicator">
+        <svg class="video-icon" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <div class="video-details">
+          <div class="video-title" id="videoTitle">Loading...</div>
+          <div class="video-url" id="videoUrl"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container">
+      <div class="messages" id="messages">
+        <div class="welcome-message">
+          <div class="ai-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <path d="M12 17h.01"/>
+            </svg>
+          </div>
+          <div class="message-content">
+            <p>Hi! I'm your YouTube AI assistant. Ask me anything about this video and I'll help you understand it better.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="input-container">
+      <div class="input-wrapper">
+        <textarea 
+          id="question" 
+          placeholder="Ask me anything about this video..." 
+          rows="1"
+          maxlength="500"
+        ></textarea>
+        <button id="ask" class="send-button" disabled>
+          <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
+          </svg>
+        </button>
+      </div>
+      <div class="input-footer">
+        <span class="char-counter" id="charCounter">0/500</span>
+        <span class="powered-by">Powered by Gemini AI</span>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Thinking...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
