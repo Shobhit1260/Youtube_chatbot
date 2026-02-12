@@ -3,6 +3,7 @@ uvicorn
 langchain
 langchain-google-genai
 langchain-community
+langchain-huggingface
 youtube-transcript-api
 faiss-cpu
 python-dotenv

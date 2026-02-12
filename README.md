@@ -1,4 +1,4 @@
-# 🎥 Ask-It YouTube Chatbot Assistant
+# 🎥 Youtube Chatbot Assistant
 
 An AI-powered chatbot that allows you to ask questions about any YouTube video. The assistant analyzes video transcripts using advanced language models to provide accurate answers about the content.
 
@@ -37,7 +37,7 @@ The project consists of two main components:
 
 ```bash
 git clone <repository-url>
-cd Ask-It-Youtube-Chatbot-Assistant
+cd youtube_Chatbot 
 ```
 
 ### 2. Set Up Backend
@@ -167,7 +167,6 @@ Ask-It-Youtube-Chatbot-Assistant/
 │   ├── popup.js            # Extension logic
 │   ├── content.js          # Content script
 │   └── styles.css          # Extension styles
-├── YOUTUBE_CHATBOT.ipynb   # Jupyter notebook (optional)
 └── README.md               # This file
 ```
 
