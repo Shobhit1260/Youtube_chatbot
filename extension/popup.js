@@ -169,6 +169,9 @@ async function handleSendMessage() {
   updateStatus("loading", "Processing...");
   
   try {
+    console.log("Sending request to backend with video_id:", currentVideoId);
+    console.log("Question:", question);
+    
     const response = await fetch("http://127.0.0.1:8000/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -178,24 +181,40 @@ async function handleSendMessage() {
       }),
     });
     
+    console.log("Response status:", response.status);
+    
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || `HTTP ${response.status}`);
+      let errorDetail = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || errorDetail;
+      } catch (e) {
+        // Response wasn't JSON, use status message
+        errorDetail = response.statusText || errorDetail;
+      }
+      throw new Error(errorDetail);
     }
     
     const data = await response.json();
+    console.log("Received response:", data);
     
     // Add AI response to chat
     addMessage(data.answer || "I couldn't generate a response.", 'ai');
     updateStatus("ready", "Ready");
     
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("Full error object:", error);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
     
     let errorMessage = "Sorry, I couldn't process your request. ";
     
-    if (error.message.includes('fetch')) {
-      errorMessage += "Make sure the backend server is running.";
+    if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
+      errorMessage += "Make sure the backend server is running at http://127.0.0.1:8000";
+    } else if (error.message.includes('Transcripts are disabled')) {
+      errorMessage += "This video has transcripts disabled.";
+    } else if (error.message.includes('No transcript found')) {
+      errorMessage += "No transcript available for this video.";
     } else {
       errorMessage += error.message;
     }

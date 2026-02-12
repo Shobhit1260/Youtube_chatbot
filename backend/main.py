@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
 from dotenv import load_dotenv
 from pathlib import Path
@@ -18,10 +17,24 @@ logger = logging.getLogger(__name__)
 # Explicitly load .env from project root directory
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
+logger.info(f"Loaded .env from: {env_path}")
+hf_token = os.getenv("HuggingFace_API_Key")
 
-os.environ["HF_TOKEN"] = os.getenv("HuggingFace_API_Key")
+if not hf_token:
+    raise RuntimeError("HuggingFace_API_Key not found in .env file")
+
+os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
 
+llm = HuggingFaceEndpoint(
+         repo_id="mistralai/Mistral-7B-Instruct-v0.2",
+         task="text-generation",
+         max_new_tokens=512,
+         temperature=0.7
+         )
+
+        # Wrap it with ChatHuggingFace for proper conversational handling
+model = ChatHuggingFace(llm=llm)
 
 # CORS middleware
 app.add_middleware(
@@ -109,16 +122,8 @@ async def ask_video_question(query: Query):
         transcript_text = get_video_transcript(video_id)
         logger.info(f"Retrieved transcript ({len(transcript_text)} characters)")
         
-        # Initialize the model
-        llm = HuggingFaceEndpoint(
-         repo_id="google/gemma-2-2b-it",
-         task="text-generation",
-         max_new_tokens=512,
-         temperature=0.7
-      )
-
-# Wrap it with ChatHuggingFace for proper conversational handling
-        model = ChatHuggingFace(llm=llm)
+    
+        
         
         # Create prompt template
         prompt = ChatPromptTemplate.from_template("""
@@ -136,6 +141,9 @@ async def ask_video_question(query: Query):
         # Create chain and invoke
         chain = prompt | model
         logger.info("Invoking AI model...")
+
+        if len(transcript_text) > 12000:
+            transcript_text = transcript_text[:12000]
         
         response = chain.invoke({
             "transcript": transcript_text,
