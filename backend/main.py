@@ -26,8 +26,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Redis connection
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
-
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST"),
+    port=int(os.getenv("REDIS_PORT")),
+    password=os.getenv("REDIS_PASSWORD"),
+    decode_responses=True
+)
 # Explicitly load .env from project root directory
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -239,7 +243,6 @@ async def ask_video_question(query: Query):
         # Extract and validate video ID
         video_id = extract_video_id(query.video_id)
         logger.info(f"Extracted video ID: {video_id}")
-
         # Get transcript
         transcript_text = get_video_transcript(video_id)
 
@@ -261,9 +264,7 @@ async def ask_video_question(query: Query):
         vector_store = get_vectorstore(video_id, texts)
         retriever = vector_store.as_retriever(search_type="mmr")
         docs = retriever.invoke(query.question)
-
         context = "\n\n".join(doc.page_content for doc in docs)
-
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -276,7 +277,6 @@ async def ask_video_question(query: Query):
                      1. Conversation summary
                      2. Recent chat history
                      3. Transcript context
-
                      Conversation Summary:
                      {summary}
                      """,
@@ -287,7 +287,6 @@ async def ask_video_question(query: Query):
                     """
                     Transcript Context:
                     {context}
-
                     Question:
                     {question}
                     """,
@@ -297,15 +296,10 @@ async def ask_video_question(query: Query):
         # Create chain and invoke
         chain = prompt | llm
         logger.info("Invoking AI model...")
-
         response = chain.invoke({
-
         "summary": summary_memory,
-
         "chat_history": short_memory,
-
         "context": context,
-
         "question": query.question
         })
         # Extract content from response
