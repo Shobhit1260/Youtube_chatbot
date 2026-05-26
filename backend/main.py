@@ -3,12 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace, HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 import os
 import re
 import logging
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -26,15 +30,20 @@ if not hf_token:
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
 
-llm = HuggingFaceEndpoint(
-         repo_id="mistralai/Mistral-7B-Instruct-v0.2",
-         task="text-generation",
-         max_new_tokens=512,
-         temperature=0.7
-         )
+llm = ChatOpenAI(
+    model="deepseek/deepseek-chat",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1",
+    temperature=0.3
+)
 
-        # Wrap it with ChatHuggingFace for proper conversational handling
-model = ChatHuggingFace(llm=llm)
+
+
+
+# embedding model
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
 
 # CORS middleware
 app.add_middleware(
@@ -113,17 +122,31 @@ async def ask_video_question(query: Query):
     """Ask a question about a YouTube video"""
     try:
         logger.info(f"Processing query for video: {query.video_id}")
-        
+        print("GEMINI_API_KEY",os.getenv("GEMINI_API_KEY"))
+
         # Extract and validate video ID
         video_id = extract_video_id(query.video_id)
         logger.info(f"Extracted video ID: {video_id}")
         
         # Get transcript
         transcript_text = get_video_transcript(video_id)
+
+
         logger.info(f"Retrieved transcript ({len(transcript_text)} characters)")
         
-    
-        
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        texts = text_splitter.split_text(transcript_text)
+
+        vector_store = FAISS.from_texts(texts, embeddings)
+        retriever = vector_store.as_retriever(
+            search_type="mmr"
+        )
+        docs = retriever.invoke(query.question)
+
+        context = "\n\n".join(
+        doc.page_content for doc in docs
+        )
+
         
         # Create prompt template
         prompt = ChatPromptTemplate.from_template("""
@@ -132,21 +155,18 @@ async def ask_video_question(query: Query):
         
         If the answer cannot be found in the transcript, say so clearly.
         
-        Transcript: {transcript}
+        Transcript: {context}
         
         Question: {question}
         
         Answer:""")
         
         # Create chain and invoke
-        chain = prompt | model
+        chain = prompt | llm
         logger.info("Invoking AI model...")
-
-        if len(transcript_text) > 12000:
-            transcript_text = transcript_text[:12000]
         
         response = chain.invoke({
-            "transcript": transcript_text,
+            "context": context,
             "question": query.question
         })
         
