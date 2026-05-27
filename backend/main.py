@@ -1,11 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from youtube_transcript_api import (
-    YouTubeTranscriptApi,
-    TranscriptsDisabled,
-    NoTranscriptFound,
-)
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_cohere import CohereEmbeddings
 from langchain_core.prompts import MessagesPlaceholder
@@ -15,6 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import Optional
 import os
 import re
 import logging
@@ -29,7 +25,7 @@ logger = logging.getLogger(__name__)
 redis_client = redis.Redis(
     host=os.getenv("REDIS_HOST"),
     port=int(os.getenv("REDIS_PORT")),
-    decode_responses=True
+    decode_responses=True,
 )
 
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
@@ -41,13 +37,12 @@ llm = ChatOpenAI(
     temperature=0.3,
     default_headers={
         "HTTP-Referer": "https://youtube-chatbot-e77g.onrender.com",
-        "X-Title": "youtube-chatbot"
-    }
+        "X-Title": "youtube-chatbot",
+    },
 )
 
 embeddings = CohereEmbeddings(
-    model="embed-english-v3.0",
-    cohere_api_key=os.getenv("COHERSE_KEY")
+    model="embed-english-v3.0", cohere_api_key=os.getenv("COHERSE_KEY")
 )
 
 
@@ -64,6 +59,7 @@ app.add_middleware(
 class Query(BaseModel):
     video_id: str
     question: str
+    transcript_text: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
@@ -77,6 +73,7 @@ class HealthResponse(BaseModel):
 
 TRANSCRIPT_DIR = "transcripts"
 os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
+
 
 def add_short_memory(video_id, role, message):
     key = f"short_memory:{video_id}"
@@ -140,69 +137,33 @@ def extract_video_id(url_or_id: str) -> str:
     raise ValueError(f"Invalid YouTube URL or video ID: {url_or_id}")
 
 
-def get_video_transcript(video_id: str) -> str:
-    """Get transcript with local caching"""
-    transcript_path = os.path.join(
-        TRANSCRIPT_DIR,
-        f"{video_id}.txt"
-    )
+def get_cached_transcript(video_id: str) -> Optional[str]:
+    """Load transcript from local cache if it exists"""
+    transcript_path = os.path.join(TRANSCRIPT_DIR, f"{video_id}.txt")
 
-    # -----------------------------
-    # LOAD FROM LOCAL FILE
-    # -----------------------------
     if os.path.exists(transcript_path):
         logger.info("Loading transcript from local storage")
         with open(transcript_path, "r", encoding="utf-8") as file:
             return file.read()
 
-    # -----------------------------
-    # FETCH FROM YOUTUBE
-    # -----------------------------
-    try:
-        logger.info("Fetching transcript from YouTube")
-        fetched_transcript = YouTubeTranscriptApi().fetch(
-            video_id,
-            languages=["en"]
-        )
+    return None
 
-        transcript_list = fetched_transcript.to_raw_data()
-        transcript_text = " ".join(
-            item["text"] for item in transcript_list
-        )
 
-        # Limit transcript size
-        if len(transcript_text) > 50000:
-            logger.warning(
-                f"Transcript too long ({len(transcript_text)} chars)"
-            )
-            transcript_text = transcript_text[:50000] + "..."
+def save_transcript(video_id: str, transcript_text: str) -> str:
+    """Persist a transcript received from the client"""
+    transcript_path = os.path.join(TRANSCRIPT_DIR, f"{video_id}.txt")
 
-        # -----------------------------
-        # SAVE LOCALLY
-        # -----------------------------
-        with open(transcript_path, "w", encoding="utf-8") as file:
-            file.write(transcript_text)
-        logger.info("Transcript saved locally")
-        return transcript_text
+    cleaned_text = transcript_text.strip()
 
-    except TranscriptsDisabled:
-        raise HTTPException(
-            status_code=400,
-            detail="Transcripts are disabled for this video"
-        )
+    if len(cleaned_text) > 50000:
+        logger.warning(f"Transcript too long ({len(cleaned_text)} chars)")
+        cleaned_text = cleaned_text[:50000] + "..."
 
-    except NoTranscriptFound:
-        raise HTTPException(
-            status_code=404,
-            detail="No transcript found for this video"
-        )
+    with open(transcript_path, "w", encoding="utf-8") as file:
+        file.write(cleaned_text)
 
-    except Exception as e:
-        logger.error(f"Error getting transcript: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get transcript: {str(e)}"
-        )
+    logger.info("Transcript saved locally")
+    return cleaned_text
 
 
 # -----------------------------
@@ -235,19 +196,29 @@ async def ask_video_question(query: Query):
         # Extract and validate video ID
         video_id = extract_video_id(query.video_id)
         logger.info(f"Extracted video ID: {video_id}")
-        # Get transcript
-        transcript_text = get_video_transcript(video_id)
+
+        transcript_text = query.transcript_text
+        if transcript_text:
+            transcript_text = save_transcript(video_id, transcript_text)
+        else:
+            transcript_text = get_cached_transcript(video_id)
+
+        if not transcript_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Transcript text is required. Fetch it in the extension and send it with the request.",
+            )
 
         # LOAD MEMORIES
 
         try:
-           short_memory = get_short_memory(video_id)
-           summary_memory = get_summary(video_id)
+            short_memory = get_short_memory(video_id)
+            summary_memory = get_summary(video_id)
 
         except Exception as e:
-           logger.error(f"Redis error: {e}")
-           short_memory = []
-           summary_memory = ""
+            logger.error(f"Redis error: {e}")
+            short_memory = []
+            summary_memory = ""
 
         logger.info(f"Retrieved transcript ({len(transcript_text)} characters)")
 
@@ -272,7 +243,7 @@ async def ask_video_question(query: Query):
                      Conversation Summary:
                      {summary}
                      """,
-                    ),
+                ),
                 MessagesPlaceholder(variable_name="chat_history"),
                 (
                     "human",
@@ -288,35 +259,24 @@ async def ask_video_question(query: Query):
         # Create chain and invoke
         chain = prompt | llm
         logger.info("Invoking AI model...")
-        response = chain.invoke({
-        "summary": summary_memory,
-        "chat_history": short_memory,
-        "context": context,
-        "question": query.question
-        })
+        response = chain.invoke(
+            {
+                "summary": summary_memory,
+                "chat_history": short_memory,
+                "context": context,
+                "question": query.question,
+            }
+        )
         # Extract content from response
         answer = response.content if hasattr(response, "content") else str(response)
-        
-       # UPDATE SHORT-TERM MEMORY
-        add_short_memory(
-             video_id,
-             "user",
-             query.question
-         )
 
-        add_short_memory(
-             video_id,
-             "assistant",
-             answer
-         )
+        # UPDATE SHORT-TERM MEMORY
+        add_short_memory(video_id, "user", query.question)
+
+        add_short_memory(video_id, "assistant", answer)
 
         # UPDATE SUMMARY MEMORY
-        update_summary(
-             video_id,
-             llm,
-             query.question,
-             answer
-        )
+        update_summary(video_id, llm, query.question, answer)
 
         logger.info("Successfully generated response")
         return {
@@ -333,8 +293,6 @@ async def ask_video_question(query: Query):
         raise HTTPException(
             status_code=500, detail=f"An unexpected error occurred: {str(e)}"
         )
-
-
 
 
 if __name__ == "__main__":

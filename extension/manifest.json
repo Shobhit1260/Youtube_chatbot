@@ -3,34 +3,46 @@
   "name": "YouTube Chatbot Assistant",
   "version": "1.0",
   "description": "AI-powered chatbot for YouTube videos using RAG and LangChain",
+
   "permissions": [
-    "activeTab", 
-    "scripting", 
+    "activeTab",
+    "scripting",
     "storage"
   ],
+
   "host_permissions": [
     "https://www.youtube.com/*",
-    "http://localhost:8000/*",
-    "http://127.0.0.1:8000/*"
+    "https://youtube-chatbot-e77g.onrender.com/*"
   ],
+
   "action": {
     "default_popup": "popup.html",
     "default_title": "YouTube Chatbot"
   },
+
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
+
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "popup.js"],
-      "matches": ["https://www.youtube.com/*"]
+      "resources": [
+        "popup.html",
+        "popup.js"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
+      ]
     }
   ],
+
   "content_security_policy": {
-  "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

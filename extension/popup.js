@@ -1,6 +1,7 @@
 // Global variables
 let currentVideoId = null;
 let currentVideoTitle = null;
+let currentTabId = null;
 
 // DOM elements
 const questionInput = document.getElementById("question");
@@ -14,7 +15,7 @@ const videoTitle = document.getElementById("videoTitle");
 const videoUrl = document.getElementById("videoUrl");
 
 // Initialize the popup
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener("DOMContentLoaded", function () {
   initializePopup();
   setupEventListeners();
 });
@@ -28,8 +29,9 @@ function initializePopup() {
     }
 
     const tab = tabs[0];
+    currentTabId = tab.id;
     const videoId = extractVideoId(tab.url);
-    
+
     if (videoId) {
       currentVideoId = videoId;
       currentVideoTitle = tab.title;
@@ -46,7 +48,7 @@ function initializePopup() {
 function setupEventListeners() {
   // Send button click
   askButton.addEventListener("click", handleSendMessage);
-  
+
   // Enter key to send (Shift+Enter for new line)
   questionInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -54,14 +56,14 @@ function setupEventListeners() {
       handleSendMessage();
     }
   });
-  
+
   // Auto-resize textarea and update character counter
   questionInput.addEventListener("input", () => {
     autoResizeTextarea();
     updateCharCounter();
     toggleSendButton();
   });
-  
+
   // Initial setup
   updateCharCounter();
   toggleSendButton();
@@ -70,22 +72,22 @@ function setupEventListeners() {
 function extractVideoId(url) {
   try {
     const urlObj = new URL(url);
-    
+
     // Standard YouTube URL
-    if (urlObj.hostname.includes('youtube.com')) {
-      return urlObj.searchParams.get('v');
+    if (urlObj.hostname.includes("youtube.com")) {
+      return urlObj.searchParams.get("v");
     }
-    
+
     // YouTube shorts URL
-    if (urlObj.pathname.includes('/shorts/')) {
-      return urlObj.pathname.split('/shorts/')[1].split('/')[0];
+    if (urlObj.pathname.includes("/shorts/")) {
+      return urlObj.pathname.split("/shorts/")[1].split("/")[0];
     }
-    
+
     // Youtu.be URL
-    if (urlObj.hostname === 'youtu.be') {
+    if (urlObj.hostname === "youtu.be") {
       return urlObj.pathname.substring(1);
     }
-    
+
     return null;
   } catch (e) {
     return null;
@@ -93,24 +95,24 @@ function extractVideoId(url) {
 }
 
 function showVideoInfo(title, url) {
-  videoTitle.textContent = title.replace(' - YouTube', '');
+  videoTitle.textContent = title.replace(" - YouTube", "");
   videoUrl.textContent = new URL(url).hostname;
-  videoInfo.style.display = 'block';
+  videoInfo.style.display = "block";
 }
 
 function updateStatus(type, message) {
-  const statusDot = statusElement.querySelector('.status-dot');
-  const statusText = statusElement.querySelector('span');
-  
+  const statusDot = statusElement.querySelector(".status-dot");
+  const statusText = statusElement.querySelector("span");
+
   statusText.textContent = message;
-  
-  statusDot.className = 'status-dot';
-  if (type === 'error') {
-    statusDot.style.background = '#ea4335';
-  } else if (type === 'loading') {
-    statusDot.style.background = '#fbbc04';
+
+  statusDot.className = "status-dot";
+  if (type === "error") {
+    statusDot.style.background = "#ea4335";
+  } else if (type === "loading") {
+    statusDot.style.background = "#fbbc04";
   } else {
-    statusDot.style.background = '#34a853';
+    statusDot.style.background = "#34a853";
   }
 }
 
@@ -120,20 +122,20 @@ function enableInput() {
 }
 
 function autoResizeTextarea() {
-  questionInput.style.height = 'auto';
-  questionInput.style.height = Math.min(questionInput.scrollHeight, 80) + 'px';
+  questionInput.style.height = "auto";
+  questionInput.style.height = Math.min(questionInput.scrollHeight, 80) + "px";
 }
 
 function updateCharCounter() {
   const length = questionInput.value.length;
   charCounter.textContent = `${length}/500`;
-  
+
   if (length > 450) {
-    charCounter.style.color = '#ea4335';
+    charCounter.style.color = "#ea4335";
   } else if (length > 400) {
-    charCounter.style.color = '#fbbc04';
+    charCounter.style.color = "#fbbc04";
   } else {
-    charCounter.style.color = '#5f6368';
+    charCounter.style.color = "#5f6368";
   }
 }
 
@@ -144,45 +146,52 @@ function toggleSendButton() {
 
 async function handleSendMessage() {
   const question = questionInput.value.trim();
-  
+
   if (!question) {
     questionInput.focus();
     return;
   }
-  
+
   if (!currentVideoId) {
     showError("Please open a YouTube video first!");
     return;
   }
-  
+
   // Add user message to chat
-  addMessage(question, 'user');
-  
+  addMessage(question, "user");
+
   // Clear input and disable while processing
-  questionInput.value = '';
-  questionInput.style.height = 'auto';
+  questionInput.value = "";
+  questionInput.style.height = "auto";
   updateCharCounter();
   toggleSendButton();
-  
+
   // Show loading
   showLoading();
   updateStatus("loading", "Processing...");
-  
+
   try {
+    console.log("Fetching transcript from active YouTube tab...");
+    const transcriptText = await fetchTranscriptFromActiveTab();
+
     console.log("Sending request to backend with video_id:", currentVideoId);
     console.log("Question:", question);
-    
-    const response = await fetch("http://127.0.0.1:8000/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        video_id: currentVideoId, 
-        question: question 
-      }),
-    });
-    
+
+    const response = await fetch(
+      "https://youtube-chatbot-e77g.onrender.com/ask",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          video_id: currentVideoId,
+          question: question,
+          transcript_text: transcriptText,
+        }),
+      },
+    );
+
     console.log("Response status:", response.status);
-    
+
     if (!response.ok) {
       let errorDetail = `HTTP ${response.status}`;
       try {
@@ -194,32 +203,37 @@ async function handleSendMessage() {
       }
       throw new Error(errorDetail);
     }
-    
+
     const data = await response.json();
     console.log("Received response:", data);
-    
+
     // Add AI response to chat
-    addMessage(data.answer || "I couldn't generate a response.", 'ai');
+    addMessage(data.answer || "I couldn't generate a response.", "ai");
     updateStatus("ready", "Ready");
-    
   } catch (error) {
     console.error("Full error object:", error);
     console.error("Error message:", error.message);
     console.error("Error stack:", error.stack);
-    
+
     let errorMessage = "Sorry, I couldn't process your request. ";
-    
-    if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
-      errorMessage += "Make sure the backend server is running at http://127.0.0.1:8000";
-    } else if (error.message.includes('Transcripts are disabled')) {
-      errorMessage += "This video has transcripts disabled.";
-    } else if (error.message.includes('No transcript found')) {
+
+    if (
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("fetch")
+    ) {
+      errorMessage +=
+        "Make sure the backend server is running at http://127.0.0.1:8000";
+    } else if (error.message.includes("Transcript text is required")) {
+      errorMessage += "Could not read the transcript from this YouTube page.";
+    } else if (error.message.includes("No transcript found")) {
+      errorMessage += "No transcript available for this video.";
+    } else if (error.message.includes("No transcript available")) {
       errorMessage += "No transcript available for this video.";
     } else {
       errorMessage += error.message;
     }
-    
-    addMessage(errorMessage, 'ai', true);
+
+    addMessage(errorMessage, "ai", true);
     updateStatus("error", "Error occurred");
   } finally {
     hideLoading();
@@ -228,13 +242,13 @@ async function handleSendMessage() {
 }
 
 function addMessage(content, type, isError = false) {
-  const messageDiv = document.createElement('div');
+  const messageDiv = document.createElement("div");
   messageDiv.className = `message ${type}-message`;
-  
-  const avatar = document.createElement('div');
+
+  const avatar = document.createElement("div");
   avatar.className = `${type}-avatar`;
-  
-  if (type === 'ai') {
+
+  if (type === "ai") {
     avatar.innerHTML = `
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
@@ -250,37 +264,104 @@ function addMessage(content, type, isError = false) {
       </svg>
     `;
   }
-  
-  const messageContent = document.createElement('div');
-  messageContent.className = `message-content ${isError ? 'error-message' : ''}`;
-  
-  const messageText = document.createElement('p');
+
+  const messageContent = document.createElement("div");
+  messageContent.className = `message-content ${isError ? "error-message" : ""}`;
+
+  const messageText = document.createElement("p");
   messageText.textContent = content;
   messageContent.appendChild(messageText);
-  
+
   messageDiv.appendChild(avatar);
   messageDiv.appendChild(messageContent);
-  
+
   messagesContainer.appendChild(messageDiv);
-  
+
   // Scroll to bottom
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 function showError(message) {
-  addMessage(message, 'ai', true);
+  addMessage(message, "ai", true);
 }
 
 function showLoading() {
-  loadingOverlay.style.display = 'flex';
+  loadingOverlay.style.display = "flex";
 }
 
 function hideLoading() {
-  loadingOverlay.style.display = 'none';
+  loadingOverlay.style.display = "none";
+}
+
+async function fetchTranscriptFromActiveTab() {
+  if (!currentTabId) {
+    throw new Error("No active YouTube tab found");
+  }
+
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: currentTabId },
+    world: "MAIN",
+    func: async () => {
+      const playerResponse =
+        window.ytInitialPlayerResponse || window.ytInitialData?.playerResponse;
+      const captionTracks =
+        playerResponse?.captions?.playerCaptionsTracklistRenderer
+          ?.captionTracks || [];
+
+      if (!captionTracks.length) {
+        return { error: "No transcript available for this video." };
+      }
+
+      const preferredTrack =
+        captionTracks.find((track) =>
+          (track.languageCode || "").startsWith("en"),
+        ) || captionTracks[0];
+      const transcriptUrl = new URL(preferredTrack.baseUrl);
+      transcriptUrl.searchParams.set("fmt", "json3");
+
+      const response = await fetch(transcriptUrl.toString(), {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        return { error: `Failed to fetch transcript (${response.status})` };
+      }
+
+      const transcriptData = await response.json();
+      const transcriptText = (transcriptData.events || [])
+        .map((event) =>
+          (event.segs || []).map((segment) => segment.utf8 || "").join(""),
+        )
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!transcriptText) {
+        return { error: "No transcript text found for this video." };
+      }
+
+      return {
+        transcriptText,
+        languageCode: preferredTrack.languageCode || "en",
+      };
+    },
+  });
+
+  const payload = results && results[0] ? results[0].result : null;
+
+  if (!payload) {
+    throw new Error("Failed to read transcript from the YouTube tab");
+  }
+
+  if (payload.error) {
+    throw new Error(payload.error);
+  }
+
+  return payload.transcriptText;
 }
 
 // Auto-focus on input when popup opens
-window.addEventListener('load', () => {
+window.addEventListener("load", () => {
   setTimeout(() => {
     if (questionInput && !questionInput.disabled) {
       questionInput.focus();

@@ -16,14 +16,17 @@ An AI-powered chatbot that allows you to ask questions about any YouTube video. 
 The project consists of two main components:
 
 1. **Backend API** (FastAPI)
-   - Fetches YouTube video transcripts
-   - Processes questions using AI models (HuggingFace Gemma)
-   - Provides RESTful API endpoints
+
+- Receives transcripts from the browser extension
+- Processes questions using AI models (HuggingFace Gemma)
+- Provides RESTful API endpoints
 
 2. **Chrome Extension**
    - Modern, responsive UI
    - Integrates directly with YouTube pages
-   - Communicates with the backend API
+
+- Fetches transcripts from the open YouTube tab
+- Communicates with the backend API
 
 ## 📋 Prerequisites
 
@@ -37,7 +40,7 @@ The project consists of two main components:
 
 ```bash
 git clone <repository-url>
-cd youtube_Chatbot 
+cd youtube_Chatbot
 ```
 
 ### 2. Set Up Backend
@@ -51,11 +54,13 @@ python -m venv venv
 #### Activate Virtual Environment
 
 **Windows:**
+
 ```bash
 venv\Scripts\activate
 ```
 
 **Mac/Linux:**
+
 ```bash
 source venv/bin/activate
 ```
@@ -107,24 +112,31 @@ The API server will start at `http://127.0.0.1:8000`
 ## 📡 API Endpoints
 
 ### Health Check
+
 ```
 GET /
 ```
+
 Returns the API health status.
 
 ### Ask Question
+
 ```
 POST /ask
 ```
+
 **Request Body:**
+
 ```json
 {
   "video_id": "VIDEO_ID_OR_URL",
-  "question": "Your question here"
+  "question": "Your question here",
+  "transcript_text": "Transcript text fetched in the extension"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "answer": "AI-generated answer",
@@ -134,14 +146,17 @@ POST /ask
 ```
 
 ### Test Transcript
+
 ```
 GET /test/{video_id}
 ```
+
 Check if a transcript is available for a specific video.
 
 ## 🛠️ Technology Stack
 
 ### Backend
+
 - **FastAPI**: Modern web framework for building APIs
 - **LangChain**: Framework for LLM applications
 - **HuggingFace**: AI model hosting (Gemma 2-2B)
@@ -149,6 +164,7 @@ Check if a transcript is available for a specific video.
 - **Python-dotenv**: Environment variable management
 
 ### Frontend (Extension)
+
 - **HTML/CSS/JavaScript**: Core web technologies
 - **Chrome Extension API**: Browser integration
 - **Fetch API**: HTTP requests to backend
@@ -175,6 +191,7 @@ Ask-It-Youtube-Chatbot-Assistant/
 ### Backend Configuration
 
 Edit [backend/main.py](backend/main.py) to customize:
+
 - AI model selection
 - Token limits
 - Temperature settings
@@ -183,6 +200,7 @@ Edit [backend/main.py](backend/main.py) to customize:
 ### Extension Configuration
 
 Edit [extension/manifest.json](extension/manifest.json) to:
+
 - Change extension name/description
 - Modify permissions
 - Update API endpoint URLs
@@ -192,18 +210,27 @@ Edit [extension/manifest.json](extension/manifest.json) to:
 ### Common Issues
 
 **1. "Transcripts are disabled for this video"**
+
 - Some videos don't have transcripts available
 - Try a different video with captions/subtitles
 
-**2. "Connection refused" errors**
+**2. "Transcript text is required" errors**
+
+- Make sure you opened the extension on a YouTube watch page
+- The extension now reads the transcript from the browser tab before calling the backend
+
+**3. "Connection refused" errors**
+
 - Ensure the backend server is running
 - Check that you're using the correct port (8000)
 
-**3. Extension not detecting video**
+**4. Extension not detecting video**
+
 - Refresh the YouTube page
 - Make sure you're on a video page (not search/home)
 
-**4. API errors**
+**5. API errors**
+
 - Verify your HuggingFace token is valid
 - Check backend logs for detailed error messages
 
