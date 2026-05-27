@@ -40,7 +40,7 @@ llm = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     temperature=0.3,
     default_headers={
-        "HTTP-Referer": "http://localhost:8000",
+        "HTTP-Referer": "https://youtube-chatbot-e77g.onrender.com",
         "X-Title": "youtube-chatbot"
     }
 )
