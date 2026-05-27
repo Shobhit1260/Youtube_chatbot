@@ -47,7 +47,7 @@ llm = ChatOpenAI(
 
 embeddings = CohereEmbeddings(
     model="embed-english-v3.0",
-    cohere_api_key=os.getenv("COHERE_API_KEY")
+    cohere_api_key=os.getenv("COHERSE_KEY")
 )
 
 
