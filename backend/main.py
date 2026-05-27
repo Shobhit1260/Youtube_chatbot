@@ -7,7 +7,7 @@ from youtube_transcript_api import (
     NoTranscriptFound,
 )
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_cohere import CohereEmbeddings
 from langchain_core.prompts import MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.vectorstores import FAISS
@@ -31,16 +31,7 @@ redis_client = redis.Redis(
     port=int(os.getenv("REDIS_PORT")),
     decode_responses=True
 )
-# Explicitly load .env from project root directory
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
-logger.info(f"Loaded .env from: {env_path}")
-hf_token = os.getenv("HuggingFace_API_Key")
 
-if not hf_token:
-    raise RuntimeError("HuggingFace_API_Key not found in .env file")
-
-os.environ["HUGGINGFACEHUB_API_TOKEN"] = hf_token
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
 
 llm = ChatOpenAI(
@@ -54,11 +45,11 @@ llm = ChatOpenAI(
     }
 )
 
+embeddings = CohereEmbeddings(
+    model="embed-english-v3.0",
+    cohere_api_key=os.getenv("COHERE_API_KEY")
+)
 
-# embedding model
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/paraphrase-MiniLM-L3-v2"
-    )
 
 # CORS middleware
 app.add_middleware(
