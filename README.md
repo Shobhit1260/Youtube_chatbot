@@ -25,7 +25,7 @@ The project consists of two main components:
    - Modern, responsive UI
    - Integrates directly with YouTube pages
 
-- Fetches transcripts from the open YouTube tab
+- Fetches transcripts from the open YouTube tab using the browser's IP
 - Communicates with the backend API
 
 ## 📋 Prerequisites
@@ -145,14 +145,6 @@ POST /ask
 }
 ```
 
-### Test Transcript
-
-```
-GET /test/{video_id}
-```
-
-Check if a transcript is available for a specific video.
-
 ## 🛠️ Technology Stack
 
 ### Backend
@@ -160,7 +152,6 @@ Check if a transcript is available for a specific video.
 - **FastAPI**: Modern web framework for building APIs
 - **LangChain**: Framework for LLM applications
 - **HuggingFace**: AI model hosting (Gemma 2-2B)
-- **YouTube Transcript API**: Fetch video transcripts
 - **Python-dotenv**: Environment variable management
 
 ### Frontend (Extension)
@@ -217,7 +208,7 @@ Edit [extension/manifest.json](extension/manifest.json) to:
 **2. "Transcript text is required" errors**
 
 - Make sure you opened the extension on a YouTube watch page
-- The extension now reads the transcript from the browser tab before calling the backend
+- The extension reads the transcript from the browser tab and sends it to the backend
 
 **3. "Connection refused" errors**
 
@@ -260,7 +251,6 @@ This project is open source and available under the MIT License.
 ## 🙏 Acknowledgments
 
 - HuggingFace for providing free AI model hosting
-- Google for the YouTube Transcript API
 - FastAPI for the excellent web framework
 - LangChain for simplifying LLM integration
 

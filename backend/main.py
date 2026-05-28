@@ -16,15 +16,23 @@ import re
 import logging
 import redis
 import json
+import traceback
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Load environment variables from .env (backend/.env preferred)
+env_path = Path(__file__).resolve().parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+else:
+    load_dotenv()
+
 # Redis connection
 redis_client = redis.Redis(
-    host=os.getenv("REDIS_HOST"),
-    port=int(os.getenv("REDIS_PORT")),
+    host="localhost",
+    port=int(6379),
     decode_responses=True,
 )
 
@@ -36,10 +44,11 @@ llm = ChatOpenAI(
     base_url="https://openrouter.ai/api/v1",
     temperature=0.3,
     default_headers={
-        "HTTP-Referer": "https://youtube-chatbot-e77g.onrender.com",
+        "HTTP-Referer": "http://127.0.0.1:8000",
         "X-Title": "youtube-chatbot",
     },
 )
+
 
 embeddings = CohereEmbeddings(
     model="embed-english-v3.0", cohere_api_key=os.getenv("COHERSE_KEY")
@@ -172,13 +181,30 @@ def save_transcript(video_id: str, transcript_text: str) -> str:
 
 
 def get_vectorstore(video_id, texts):
+    logger.info(f"Split into {len(texts)} chunks")
     path = f"vector_db/{video_id}"
+
+    logger.info(f"Vector DB path: {path}")
+    logger.info(f"Texts count: {len(texts)}")
+
+    if len(texts) > 0:
+        logger.info(f"First text chunk: {texts[0][:100]}")
+
     # Load existing vectorstore
     if os.path.exists(path):
+        logger.info("Loading existing FAISS index")
         return FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
-    # Create new vectorstore
+
+    logger.info("Creating new vectorstore")
+
     vector_store = FAISS.from_texts(texts, embeddings)
+
+    logger.info("Saving vectorstore")
+
     vector_store.save_local(path)
+
+    logger.info("Vectorstore created successfully")
+
     return vector_store
 
 
@@ -206,15 +232,13 @@ async def ask_video_question(query: Query):
         if not transcript_text:
             raise HTTPException(
                 status_code=400,
-                detail="Transcript text is required. Fetch it in the extension and send it with the request.",
+                detail="Transcript text is required from the extension or a cached prior request.",
             )
 
         # LOAD MEMORIES
-
         try:
             short_memory = get_short_memory(video_id)
             summary_memory = get_summary(video_id)
-
         except Exception as e:
             logger.error(f"Redis error: {e}")
             short_memory = []
@@ -234,7 +258,8 @@ async def ask_video_question(query: Query):
                     "system",
                     """
                    You are an intelligent YouTube assistant.
-                   you do not explain more than user asks.
+                   you do not explain more than user asks to you like
+                   Eg:according to transcript .......
                    Explain whatever user asks.
                     Use:
                      1. Conversation summary
@@ -256,6 +281,7 @@ async def ask_video_question(query: Query):
                 ),
             ]
         )
+
         # Create chain and invoke
         chain = prompt | llm
         logger.info("Invoking AI model...")
@@ -267,16 +293,24 @@ async def ask_video_question(query: Query):
                 "question": query.question,
             }
         )
+
         # Extract content from response
         answer = response.content if hasattr(response, "content") else str(response)
 
-        # UPDATE SHORT-TERM MEMORY
-        add_short_memory(video_id, "user", query.question)
+        try:
+            add_short_memory(video_id, "user", query.question)
+        except Exception as e:
+            logger.error(f"Failed to save user memory: {e}")
 
-        add_short_memory(video_id, "assistant", answer)
+        try:
+            add_short_memory(video_id, "assistant", answer)
+        except Exception as e:
+            logger.error(f"Failed to save assistant memory: {e}")
 
-        # UPDATE SUMMARY MEMORY
-        update_summary(video_id, llm, query.question, answer)
+        try:
+            update_summary(video_id, llm, query.question, answer)
+        except Exception as e:
+            logger.error(f"Failed to update summary: {e}")
 
         logger.info("Successfully generated response")
         return {
@@ -285,13 +319,11 @@ async def ask_video_question(query: Query):
             "transcript_length": len(transcript_text),
         }
 
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+    except Exception:
+        logger.exception("Unhandled exception")
         raise HTTPException(
-            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+            status_code=500,
+            detail="Internal server error",
         )
 
 

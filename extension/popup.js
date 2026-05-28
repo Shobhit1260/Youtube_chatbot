@@ -172,23 +172,30 @@ async function handleSendMessage() {
 
   try {
     console.log("Fetching transcript from active YouTube tab...");
-    const transcriptText = await fetchTranscriptFromActiveTab();
+    let transcriptText = null;
+    try {
+      transcriptText = await fetchTranscriptFromActiveTab();
+    } catch (error) {
+      console.warn(
+        "Transcript extraction failed in the extension; backend will use any cached transcript.",
+        error,
+      );
+    }
 
     console.log("Sending request to backend with video_id:", currentVideoId);
     console.log("Question:", question);
 
-    const response = await fetch(
-      "https://youtube-chatbot-e77g.onrender.com/ask",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video_id: currentVideoId,
-          question: question,
-          transcript_text: transcriptText,
-        }),
-      },
-    );
+    const requestBody = {
+      video_id: currentVideoId,
+      question: question,
+      transcript_text: transcriptText || "",
+    };
+
+    const response = await fetch("http://127.0.0.1:8000/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
 
     console.log("Response status:", response.status);
 
@@ -211,26 +218,29 @@ async function handleSendMessage() {
     addMessage(data.answer || "I couldn't generate a response.", "ai");
     updateStatus("ready", "Ready");
   } catch (error) {
+    const errorMessageText =
+      error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : "";
     console.error("Full error object:", error);
-    console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
+    console.error("Error message:", errorMessageText);
+    console.error("Error stack:", errorStack);
 
     let errorMessage = "Sorry, I couldn't process your request. ";
 
     if (
-      error.message.includes("Failed to fetch") ||
-      error.message.includes("fetch")
+      errorMessageText.includes("Failed to fetch") ||
+      errorMessageText.includes("fetch")
     ) {
       errorMessage +=
         "Make sure the backend server is running at http://127.0.0.1:8000";
-    } else if (error.message.includes("Transcript text is required")) {
+    } else if (errorMessageText.includes("Transcript text is required")) {
       errorMessage += "Could not read the transcript from this YouTube page.";
-    } else if (error.message.includes("No transcript found")) {
+    } else if (errorMessageText.includes("No transcript found")) {
       errorMessage += "No transcript available for this video.";
-    } else if (error.message.includes("No transcript available")) {
+    } else if (errorMessageText.includes("No transcript available")) {
       errorMessage += "No transcript available for this video.";
     } else {
-      errorMessage += error.message;
+      errorMessage += errorMessageText;
     }
 
     addMessage(errorMessage, "ai", true);
@@ -302,61 +312,223 @@ async function fetchTranscriptFromActiveTab() {
     target: { tabId: currentTabId },
     world: "MAIN",
     func: async () => {
-      const playerResponse =
-        window.ytInitialPlayerResponse || window.ytInitialData?.playerResponse;
-      const captionTracks =
-        playerResponse?.captions?.playerCaptionsTracklistRenderer
-          ?.captionTracks || [];
+      try {
+        const findInlinePlayerResponse = () => {
+          const scripts = Array.from(document.querySelectorAll("script"));
+          for (const s of scripts) {
+            const t = s.textContent || "";
+            const m = t.match(
+              /ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\})\s*;/,
+            );
+            if (m && m[1]) {
+              try {
+                return JSON.parse(m[1]);
+              } catch (e) {
+                // ignore parse errors
+              }
+            }
+          }
+          return null;
+        };
 
-      if (!captionTracks.length) {
-        return { error: "No transcript available for this video." };
+        let playerResponse =
+          window.ytInitialPlayerResponse ||
+          window.ytInitialData?.playerResponse ||
+          null;
+
+        if (!playerResponse) {
+          try {
+            const cfg =
+              window.ytplayer &&
+              window.ytplayer.config &&
+              window.ytplayer.config.args &&
+              window.ytplayer.config.args.player_response;
+            if (cfg)
+              playerResponse = typeof cfg === "string" ? JSON.parse(cfg) : cfg;
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        if (!playerResponse) {
+          playerResponse = findInlinePlayerResponse();
+        }
+
+        const captionTracks =
+          playerResponse?.captions?.playerCaptionsTracklistRenderer
+            ?.captionTracks || [];
+
+        const diag = {
+          foundPlayerResponse: !!playerResponse,
+          captionTracksLength: captionTracks ? captionTracks.length : 0,
+        };
+
+        if (!captionTracks || !captionTracks.length) {
+          // Try YouTube timedtext API fallback (may work for auto-generated captions)
+          try {
+            const urlParams = new URL(location.href).searchParams;
+            const vid =
+              urlParams.get("v") ||
+              (location.pathname.includes("/shorts/")
+                ? location.pathname.split("/shorts/")[1].split("/")[0]
+                : null);
+            if (vid) {
+              const alt = `https://www.youtube.com/api/timedtext?v=${vid}&lang=en&fmt=json3`;
+              const altResp = await fetch(alt, { credentials: "include" });
+              diag.timedtextFetch = altResp.status;
+              if (altResp.ok) {
+                const ct = altResp.headers.get("content-type") || "";
+                if (ct.includes("application/json") || ct.includes("json")) {
+                  const data = await altResp.json();
+                  const events = data.events || [];
+                  const ttext = events
+                    .map((e) =>
+                      (e.segs || []).map((s) => s.utf8 || s.a || "").join(""),
+                    )
+                    .join(" ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+                  if (ttext)
+                    return {
+                      transcriptText: ttext,
+                      languageCode: "en",
+                      _diag: diag,
+                    };
+                } else {
+                  const txt = await altResp.text();
+                  try {
+                    const parser = new DOMParser();
+                    const xml = parser.parseFromString(txt, "text/xml");
+                    const texts = Array.from(xml.getElementsByTagName("text"));
+                    const ttext = texts
+                      .map((t) => t.textContent || "")
+                      .join(" ")
+                      .replace(/\s+/g, " ")
+                      .trim();
+                    if (ttext)
+                      return {
+                        transcriptText: ttext,
+                        languageCode: "en",
+                        _diag: diag,
+                      };
+                  } catch (e) {
+                    const ttext = txt
+                      .replace(/<[^>]+>/g, "")
+                      .replace(/\s+/g, " ")
+                      .trim();
+                    if (ttext)
+                      return {
+                        transcriptText: ttext,
+                        languageCode: "en",
+                        _diag: diag,
+                      };
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            diag.timedtextError = String(e);
+          }
+
+          return {
+            error: "No transcript available for this video.",
+            _diag: diag,
+          };
+        }
+
+        const preferredTrack =
+          captionTracks.find((t) => (t.languageCode || "").startsWith("en")) ||
+          captionTracks[0];
+        let baseUrl = preferredTrack.baseUrl || preferredTrack.url || null;
+        if (!baseUrl)
+          return { error: "Caption track has no base URL.", _diag: diag };
+
+        try {
+          const tu = new URL(baseUrl);
+          if (!tu.searchParams.get("fmt")) tu.searchParams.set("fmt", "json3");
+          baseUrl = tu.toString();
+        } catch (e) {
+          // leave baseUrl as-is
+        }
+
+        const resp = await fetch(baseUrl, { credentials: "include" });
+        diag.fetchStatus = resp.status;
+        if (!resp.ok)
+          return {
+            error: `Failed to fetch transcript (${resp.status})`,
+            _diag: diag,
+          };
+
+        const contentType = resp.headers.get("content-type") || "";
+        let transcriptText = "";
+
+        if (
+          contentType.includes("application/json") ||
+          contentType.includes("json")
+        ) {
+          const data = await resp.json();
+          const events = data.events || [];
+          transcriptText = events
+            .map((e) => (e.segs || []).map((s) => s.utf8 || s.a || "").join(""))
+            .join(" ")
+            .replace(/\s+/g, " ")
+            .trim();
+        } else {
+          const txt = await resp.text();
+          // If we unexpectedly received HTML, include a short snippet for diagnostics
+          if (contentType.includes("text/html") || txt.trim().startsWith("<")) {
+            diag.htmlSnippet = txt.substring(0, 800);
+          }
+          try {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(txt, "text/xml");
+            const texts = Array.from(xml.getElementsByTagName("text"));
+            transcriptText = texts
+              .map((t) => t.textContent || "")
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim();
+          } catch (e) {
+            transcriptText = txt
+              .replace(/<[^>]+>/g, "")
+              .replace(/\s+/g, " ")
+              .trim();
+          }
+        }
+
+        diag.contentType = contentType;
+        diag.transcriptLength = transcriptText.length;
+        if (!transcriptText)
+          return {
+            error: "No transcript text found for this video.",
+            _diag: diag,
+          };
+
+        return {
+          transcriptText,
+          languageCode: preferredTrack.languageCode || "unknown",
+          _diag: diag,
+        };
+      } catch (err) {
+        return {
+          error:
+            "Unexpected error extracting transcript: " +
+            (err && err.message ? err.message : String(err)),
+          _diag: { error: String(err) },
+        };
       }
-
-      const preferredTrack =
-        captionTracks.find((track) =>
-          (track.languageCode || "").startsWith("en"),
-        ) || captionTracks[0];
-      const transcriptUrl = new URL(preferredTrack.baseUrl);
-      transcriptUrl.searchParams.set("fmt", "json3");
-
-      const response = await fetch(transcriptUrl.toString(), {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        return { error: `Failed to fetch transcript (${response.status})` };
-      }
-
-      const transcriptData = await response.json();
-      const transcriptText = (transcriptData.events || [])
-        .map((event) =>
-          (event.segs || []).map((segment) => segment.utf8 || "").join(""),
-        )
-        .join(" ")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!transcriptText) {
-        return { error: "No transcript text found for this video." };
-      }
-
-      return {
-        transcriptText,
-        languageCode: preferredTrack.languageCode || "en",
-      };
     },
   });
 
   const payload = results && results[0] ? results[0].result : null;
-
-  if (!payload) {
+  if (!payload)
     throw new Error("Failed to read transcript from the YouTube tab");
-  }
-
   if (payload.error) {
-    throw new Error(payload.error);
+    const diag = payload._diag
+      ? ` | diag: ${JSON.stringify(payload._diag)}`
+      : "";
+    throw new Error(payload.error + diag);
   }
-
   return payload.transcriptText;
 }
 
