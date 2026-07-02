@@ -145,7 +145,11 @@ POST /ask
 }
 ```
 
+<<<<<<< HEAD
 ## 🛠️ Technology Stack
+=======
+
+>>>>>>> fix-and-restore
 
 ### Backend
 
@@ -188,8 +192,8 @@ Edit [backend/main.py](backend/main.py) to customize:
 - Temperature settings
 - CORS origins
 
-### Extension Configuration
 
+<<<<<<< HEAD
 Edit [extension/manifest.json](extension/manifest.json) to:
 
 - Change extension name/description
@@ -247,6 +251,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📄 License
 
 This project is open source and available under the MIT License.
+=======
+>>>>>>> fix-and-restore
 
 ## 🙏 Acknowledgments
 
@@ -254,10 +260,4 @@ This project is open source and available under the MIT License.
 - FastAPI for the excellent web framework
 - LangChain for simplifying LLM integration
 
-## 📞 Support
 
-For issues, questions, or suggestions, please open an issue on the GitHub repository.
-
----
-
-**Happy Learning! 🎓✨**
