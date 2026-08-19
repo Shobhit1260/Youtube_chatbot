@@ -1,12 +1,13 @@
-from typing import Optional
+print("🔥🔥🔥 MAIN.PY IS RUNNING 🔥🔥🔥")
+print("FILE:", __file__)
 
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_cohere import CohereEmbeddings
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
-from youtube_transcript_api.formatters import TextFormatter
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -17,28 +18,42 @@ import os
 import re
 import json
 import logging
+from pathlib import Path
 import redis
 
-# LOAD ENV
-load_dotenv()
+import sys
+print("PYTHON EXECUTABLE:", sys.executable)
+print("PYTHON VERSION:", sys.version)
 
+# LOAD ENV
+base_dir = Path(__file__).resolve().parent
+for env_path in [base_dir / ".env", base_dir / "env"]:
+    if env_path.exists():
+        load_dotenv(env_path)
 
 # LOGGING
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-
 # REDIS
-import os
-print(f"DEBUG: Using Redis URL: {os.getenv('REDIS_URL')}")
-redis_url=os.getenv("REDIS_URL")
+redis_url = os.getenv("REDIS_URL")
+if not redis_url:
+    raise RuntimeError(
+        "REDIS_URL is not set. Add it to backend/.env or backend/env, for example: REDIS_URL=redis://localhost:6379/0"
+    )
+
+logger.info("Using Redis URL: %s", redis_url)
 redis_client = redis.from_url(redis_url, decode_responses=True)
 
 
 
 # APP
+# app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
+
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
+
+print("REGISTERED ROUTES:")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,10 +96,6 @@ class HealthResponse(BaseModel):
     message: str
 
 
-
-# SHORT-TERM MEMORY
-TRANSCRIPT_DIR = "transcripts"
-os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
 
 def add_short_memory(video_id, role, message):
     key = f"short_memory:{video_id}"
@@ -291,6 +302,28 @@ def ask(query: Query):
         logger.exception(e)
         raise HTTPException(500, str(e))
 
+@app.get("/test-transcript")
+def test_transcript():
+    try:
+        api = YouTubeTranscriptApi()
+        transcript = api.fetch("aDG1T0kJnd4")
+
+        return {
+            "success": True,
+            "length": len(transcript),
+            "first": transcript[0].text
+        }
+
+    except Exception as e:
+        logger.exception("TEST TRANSCRIPT ERROR")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+print("🔥 REGISTERED ROUTES:")
+for route in app.routes:
+    print("ROUTE:", route.path, route.methods)
 
 if __name__ == "__main__":
     import uvicorn

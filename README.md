@@ -145,11 +145,9 @@ POST /ask
 }
 ```
 
-<<<<<<< HEAD
-## 🛠️ Technology Stack
-=======
 
->>>>>>> fix-and-restore
+## 🛠️ Technology Stack
+
 
 ### Backend
 
@@ -192,67 +190,6 @@ Edit [backend/main.py](backend/main.py) to customize:
 - Temperature settings
 - CORS origins
 
-
-<<<<<<< HEAD
-Edit [extension/manifest.json](extension/manifest.json) to:
-
-- Change extension name/description
-- Modify permissions
-- Update API endpoint URLs
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**1. "Transcripts are disabled for this video"**
-
-- Some videos don't have transcripts available
-- Try a different video with captions/subtitles
-
-**2. "Transcript text is required" errors**
-
-- Make sure you opened the extension on a YouTube watch page
-- The extension reads the transcript from the browser tab and sends it to the backend
-
-**3. "Connection refused" errors**
-
-- Ensure the backend server is running
-- Check that you're using the correct port (8000)
-
-**4. Extension not detecting video**
-
-- Refresh the YouTube page
-- Make sure you're on a video page (not search/home)
-
-**5. API errors**
-
-- Verify your HuggingFace token is valid
-- Check backend logs for detailed error messages
-
-### Reinstalling Virtual Environment
-
-If you encounter dependency issues, delete and recreate the venv:
-
-```bash
-# Delete venv folder
-rm -rf venv  # Mac/Linux
-rmdir /s venv  # Windows
-
-# Recreate
-python -m venv venv
-venv\Scripts\activate  # Windows
-pip install -r backend/requirements.txt
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is open source and available under the MIT License.
-=======
->>>>>>> fix-and-restore
 
 ## 🙏 Acknowledgments
 
