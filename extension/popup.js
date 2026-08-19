@@ -2,6 +2,7 @@
 let currentVideoId = null;
 let currentVideoTitle = null;
 let currentTabId = null;
+const API_BASE_URL = "https://youtube-chatbot-e77g.onrender.com";
 
 // DOM elements
 const questionInput = document.getElementById("question");
@@ -191,7 +192,7 @@ async function handleSendMessage() {
       transcript_text: transcriptText || "",
     };
 
-    const response = await fetch("https://youtube-chatbot-e77g.onrender.com/ask", {
+    const response = await fetch(`${API_BASE_URL}/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(requestBody),
@@ -227,12 +228,9 @@ async function handleSendMessage() {
 
     let errorMessage = "Sorry, I couldn't process your request. ";
 
-    if (
-      errorMessageText.includes("Failed to fetch") ||
-      errorMessageText.includes("fetch")
-    ) {
+    if (error instanceof TypeError && errorMessageText === "Failed to fetch") {
       errorMessage +=
-        "Make sure the backend server is running at http://127.0.0.1:8000";
+        `The backend at ${API_BASE_URL} could not be reached. Check that the Render service is running.`;
     } else if (errorMessageText.includes("Transcript text is required")) {
       errorMessage += "Could not read the transcript from this YouTube page.";
     } else if (errorMessageText.includes("No transcript found")) {
