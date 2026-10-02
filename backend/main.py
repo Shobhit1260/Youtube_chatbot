@@ -1,6 +1,3 @@
-print("🔥🔥🔥 MAIN.PY IS RUNNING 🔥🔥🔥")
-print("FILE:", __file__)
-
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,13 +43,7 @@ logger.info("Using Redis URL: %s", redis_url)
 redis_client = redis.from_url(redis_url, decode_responses=True)
 
 
-
-# APP
-# app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
-
 app = FastAPI(title="YouTube Chatbot API", version="1.0.0")
-
-print("REGISTERED ROUTES:")
 
 
 app.add_middleware(
@@ -302,28 +293,7 @@ def ask(query: Query):
         logger.exception(e)
         raise HTTPException(500, str(e))
 
-@app.get("/test-transcript")
-def test_transcript():
-    try:
-        api = YouTubeTranscriptApi()
-        transcript = api.fetch("aDG1T0kJnd4")
 
-        return {
-            "success": True,
-            "length": len(transcript),
-            "first": transcript[0].text
-        }
-
-    except Exception as e:
-        logger.exception("TEST TRANSCRIPT ERROR")
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-print("🔥 REGISTERED ROUTES:")
-for route in app.routes:
-    print("ROUTE:", route.path, route.methods)
 
 if __name__ == "__main__":
     import uvicorn

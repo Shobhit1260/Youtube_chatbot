@@ -1,200 +1,232 @@
-# 🎥 Youtube Chatbot Assistant
+# YouTube Chatbot
 
-An AI-powered chatbot that allows you to ask questions about any YouTube video. The assistant analyzes video transcripts using advanced language models to provide accurate answers about the content.
+This project is a Chrome extension + FastAPI backend that answers questions about a YouTube video using transcript-based retrieval and conversation memory. The flow is:
 
-## ✨ Features
+1. Open a YouTube video in Chrome.
+2. The extension reads the current video metadata and sends the question to the backend.
+3. The backend extracts or loads the transcript, builds or reuses a FAISS vector store, retrieves relevant context, and calls an LLM through OpenRouter.
+4. The answer is returned to the extension and displayed in the popup UI.
 
-- 🤖 **AI-Powered Q&A**: Ask questions about any YouTube video and get intelligent responses
-- 🎯 **Chrome Extension**: Convenient browser extension with a beautiful, modern UI
-- 🚀 **FastAPI Backend**: High-performance API server for processing requests
-- 📝 **Transcript Analysis**: Automatically fetches and analyzes video transcripts
-- 🔄 **Real-time Responses**: Fast and accurate answers using HuggingFace models
-- 💬 **Conversational Interface**: User-friendly chat interface for natural interactions
+## Current project configuration
 
-## 🏗️ Architecture
+The repo is currently configured around the following stack:
 
-The project consists of two main components:
+- FastAPI backend in `backend/main.py`
+- Redis-backed memory for short conversation history and summary memory
+- OpenRouter API via `ChatOpenAI`
+- Cohere embeddings via `CohereEmbeddings`
+- FAISS vector index stored under `backend/vector_db/`
+- Cached transcript storage under `backend/transcripts/`
+- Chrome extension in `extension/` using Manifest V3
 
-1. **Backend API** (FastAPI)
+## Features
 
-- Receives transcripts from the browser extension
-- Processes questions using AI models (HuggingFace Gemma)
-- Provides RESTful API endpoints
+- Ask questions about the current YouTube video
+- Use a transcript as the source of truth for grounding answers
+- Cache transcripts locally to avoid repeated downloads
+- Reuse a FAISS index for each video ID
+- Maintain short-term chat memory and summary memory in Redis
+- Works with a local API server or a hosted backend URL
 
-2. **Chrome Extension**
-   - Modern, responsive UI
-   - Integrates directly with YouTube pages
+## Project structure
 
-- Fetches transcripts from the open YouTube tab using the browser's IP
-- Communicates with the backend API
-
-## 📋 Prerequisites
-
-- Python 3.8 or higher
-- Google Chrome browser
-- HuggingFace account (for API token)
-
-## 🚀 Installation
-
-### 1. Clone the Repository
-
-```bash
-git clone <repository-url>
-cd youtube_Chatbot
+```text
+Youtube_chatbot/
+├── backend/
+│   ├── .env
+│   ├── Dockerfile
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── transcripts/
+│   └── vector_db/
+├── extension/
+│   ├── content.js
+│   ├── manifest.json
+│   ├── popup.html
+│   ├── popup.js
+│   └── styles.css
+├── README.md
+└── .gitignore
 ```
 
-### 2. Set Up Backend
+## Prerequisites
 
-#### Create Virtual Environment
+- Python 3.12+
+- Redis running locally on `redis://localhost:6379/0`
+- A valid OpenRouter API key
+- A valid Cohere API key
+- Chrome browser with Developer Mode enabled
 
-```bash
-python -m venv venv
+## Environment variables
+
+Create a `.env` file in the `backend` folder with the required values:
+
+```env
+REDIS_URL=redis://localhost:6379/0
+OPENROUTER_API_KEY=your_openrouter_key
+COHERE_KEY=your_cohere_key
 ```
 
-#### Activate Virtual Environment
+These values are used in the backend config in `backend/main.py`.
 
-**Windows:**
+## Backend setup
 
-```bash
-venv\Scripts\activate
-```
-
-**Mac/Linux:**
-
-```bash
-source venv/bin/activate
-```
-
-#### Install Dependencies
+### 1. Create and activate a virtual environment
 
 ```bash
 cd backend
+python -m venv .venv
+```
+
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-#### Configure Environment Variables
+### 3. Start Redis
 
-Create a `.env` file in the `backend` directory:
+Make sure Redis is running before starting the API server. If you are running Redis locally, the default URL is:
 
-```env
-HF_TOKEN=your_huggingface_token_here
+```text
+redis://localhost:6379/0
 ```
 
-**Note:** You can get your HuggingFace token from [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-
-### 3. Install Chrome Extension
-
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable **Developer mode** (toggle in top right)
-3. Click **Load unpacked**
-4. Select the `extension` folder from this project
-5. The extension icon should appear in your browser toolbar
-
-## 🎮 Usage
-
-### Start the Backend Server
+### 4. Start the backend
 
 ```bash
-cd backend
 python main.py
 ```
 
-The API server will start at `http://127.0.0.1:8000`
+The app runs at:
 
-### Use the Extension
-
-1. Navigate to any YouTube video
-2. Click the extension icon in your browser toolbar
-3. The extension will detect the current video
-4. Type your question in the chat input
-5. Get instant AI-powered answers about the video content
-
-## 📡 API Endpoints
-
-### Health Check
-
+```text
+http://127.0.0.1:8000
 ```
+
+## Chrome extension setup
+
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable Developer mode
+3. Click `Load unpacked`
+4. Select the `extension` folder from this project
+5. Open a YouTube video and click the extension icon
+
+The extension currently points to the local backend at:
+
+```text
+http://127.0.0.1:8000
+```
+
+The extension manifest also includes a hosted backend URL in permissions for deployment scenarios:
+
+```text
+https://youtube-chatbot-e77g.onrender.com/*
+```
+
+## API behavior
+
+### Health check
+
+```http
 GET /
 ```
 
-Returns the API health status.
+Returns a simple health payload:
 
-### Ask Question
-
+```json
+{
+  "status": "healthy",
+  "message": "API running"
+}
 ```
+
+### Ask endpoint
+
+```http
 POST /ask
 ```
 
-**Request Body:**
+Request body:
 
 ```json
 {
-  "video_id": "VIDEO_ID_OR_URL",
-  "question": "Your question here",
-  "transcript_text": "Transcript text fetched in the extension"
+  "video_id": "dQw4w9WgXcQ",
+  "question": "What is this video about?",
+  "transcript_text": "Optional transcript text from the extension"
 }
 ```
 
-**Response:**
+Response:
 
 ```json
 {
-  "answer": "AI-generated answer",
-  "video_id": "VIDEO_ID",
-  "transcript_length": 5000
+  "answer": "AI-generated answer based on the transcript context",
+  "video_id": "dQw4w9WgXcQ",
+  "transcript_length": 1234
 }
 ```
 
+## How the backend works
 
-## 🛠️ Technology Stack
+The backend performs the following steps for each request:
 
+- Extracts the YouTube video ID from a URL or ID string
+- Loads the transcript from `backend/transcripts/<video_id>.txt` if it already exists
+- Otherwise fetches it using `youtube_transcript_api`
+- Splits the transcript into chunks
+- Builds or loads a FAISS vector store in `backend/vector_db/<video_id>/`
+- Uses MMR retrieval to find relevant context for the user question
+- Loads memory from Redis for the given video
+- Sends the summary, chat history, context, and question to the LLM
+- Stores the latest user/assistant messages back in Redis
+
+## Docker
+
+A Dockerfile is included in `backend/` and exposes port 8000:
+
+```bash
+docker build -t youtube-chatbot ./backend
+```
+
+```bash
+docker run -p 8000:8000 youtube-chatbot
+```
+
+## Notes
+
+- `backend/transcripts/` and `backend/vector_db/` are generated automatically by the app.
+- The extension can still fall back to cached transcripts if transcript extraction from the active tab fails.
+- To switch the app to a deployed backend instead of local development, update the `API_BASE_URL` in `extension/popup.js` and confirm the correct host permissions in `extension/manifest.json`.
+
+## Tech stack
 
 ### Backend
 
-- **FastAPI**: Modern web framework for building APIs
-- **LangChain**: Framework for LLM applications
-- **HuggingFace**: AI model hosting (Gemma 2-2B)
-- **Python-dotenv**: Environment variable management
+- FastAPI
+- LangChain Core / LangChain Community / LangChain OpenAI
+- Cohere embeddings
+- FAISS
+- Redis
+- `youtube-transcript-api`
+- OpenRouter via `ChatOpenAI`
 
-### Frontend (Extension)
+### Frontend
 
-- **HTML/CSS/JavaScript**: Core web technologies
-- **Chrome Extension API**: Browser integration
-- **Fetch API**: HTTP requests to backend
-
-## 📁 Project Structure
-
-```
-Ask-It-Youtube-Chatbot-Assistant/
-├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── requirements.txt     # Python dependencies
-│   └── .env                 # Environment variables (create this)
-├── extension/
-│   ├── manifest.json        # Extension configuration
-│   ├── popup.html          # Extension UI
-│   ├── popup.js            # Extension logic
-│   ├── content.js          # Content script
-│   └── styles.css          # Extension styles
-└── README.md               # This file
-```
-
-## ⚙️ Configuration
-
-### Backend Configuration
-
-Edit [backend/main.py](backend/main.py) to customize:
-
-- AI model selection
-- Token limits
-- Temperature settings
-- CORS origins
-
-
-## 🙏 Acknowledgments
-
-- HuggingFace for providing free AI model hosting
-- FastAPI for the excellent web framework
-- LangChain for simplifying LLM integration
+- Manifest V3 Chrome extension
+- HTML, CSS, JavaScript
+- `fetch` API for backend requests
 
 
